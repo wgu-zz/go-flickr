@@ -15,20 +15,21 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
-	endpoint        = "https://api.flickr.com/services/rest"
+	apiEndpoint     = "https://api.flickr.com/services/rest"
 	uploadEndpoint  = "https://up.flickr.com/services/upload"
 	replaceEndpoint = "https://up.flickr.com/services/replace"
-	image_jpeg      = "image/jpeg"
+	imageJpeg       = "image/jpeg"
 )
 
 type Request struct {
-	ApiKey string
-	Method string
-	Args   map[string]string
+	HttpMethod string
+	Args       map[string]string
 }
 
 type Response struct {
@@ -54,15 +55,26 @@ func (e Error) Error() string {
 	return string(e)
 }
 
-func (request *Request) sign(verb string, request_url string, secret string) {
-	args := request.Args
+func NewRequest(a map[string]string) *Request {
+	args := make(map[string]string)
+	epoch := strconv.FormatInt(time.Now().Unix(), 10)
+	args["oauth_nonce"] = epoch
+	args["oauth_timestamp"] = epoch
+	args["oauth_signature_method"] = "HMAC-SHA1"
+	if a != nil {
+		for k, v := range a {
+			args[k] = v
+		}
+	}
+	request := Request{http.MethodGet, args}
+	return &request
+}
 
+func (request *Request) sign(requestUrl string, secret string) {
+	args := request.Args
 	delete(args, "oauth_signature")
 
-	sorted_keys := make([]string, len(args)+2)
-
-	args["oauth_consumer_key"] = request.ApiKey
-	args["method"] = request.Method
+	sorted_keys := make([]string, len(args))
 
 	// Sort array keys
 	i := 0
@@ -73,21 +85,13 @@ func (request *Request) sign(verb string, request_url string, secret string) {
 	sort.Strings(sorted_keys)
 
 	// Build out ordered key-value string prefixed by secret
-	base := verb + "&" + url.QueryEscape(request_url) + "&"
+	base := request.HttpMethod + "&" + url.QueryEscape(requestUrl) + "&"
 	var params string
 	for _, key := range sorted_keys {
-		if args[key] != "" {
-			params += fmt.Sprintf("%s=%s&", key, args[key])
-		}
+		params += fmt.Sprintf("%s=%s&", key, args[key])
 	}
 	params = params[:len(params)-1]
 	base += url.QueryEscape(params)
-
-	// Since we're only adding two keys, it's easier
-	// and more space-efficient to just delete them
-	// them copy the whole map
-	delete(args, "oauth_consumer_key")
-	delete(args, "method")
 
 	// Have the full string, now hash
 	hash := hmac.New(sha1.New, []byte(secret))
@@ -98,49 +102,34 @@ func (request *Request) sign(verb string, request_url string, secret string) {
 	args["oauth_signature"] = fmt.Sprintf("%s", sha)
 }
 
-func (request *Request) composeURL() string {
-	args := request.Args
-
-	args["oauth_consumer_key"] = request.ApiKey
-	args["method"] = request.Method
-
-	s := endpoint + "?" + encodeQuery(args)
+func (request *Request) composeGetUrl() string {
+	s := apiEndpoint + "?" + encodeQuery(request.Args)
 	return s
 }
 
-func (request *Request) Execute(http_method string, secret string) (res string, ret error) {
-	if request.ApiKey == "" || request.Method == "" {
-		return "", Error("Need both API key and method")
-	}
-
+func (request *Request) Execute(secret string) (res string, ret error) {
 	var call_err error
 	var response *Response
 
-	switch http_method {
+	switch request.HttpMethod {
 	case http.MethodPost:
-		request.sign(http_method, endpoint, secret)
-		// TODO fixit
-		request.Args["method"] = request.Method
-		request.Args["oauth_consumer_key"] = request.ApiKey
+		request.sign(apiEndpoint, secret)
 		s := encodeQuery(request.Args)
-		postRequest, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(s))
+		postRequest, err := http.NewRequest(http.MethodPost, apiEndpoint, strings.NewReader(s))
 		if err != nil {
 			return "", err
 		}
 		postRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
 		response, call_err = sendPost(postRequest)
-		//TODO fixit
-		delete(request.Args, "method")
-		delete(request.Args, "oauth_consumer_key")
 	case http.MethodGet:
-		request.sign(http_method, endpoint, secret)
-		s := request.composeURL()
+		request.sign(apiEndpoint, secret)
+		s := request.composeGetUrl()
 
 		var res *http.Response
 		res, call_err = http.Get(s)
-		defer res.Body.Close()
 
 		body, _ := ioutil.ReadAll(res.Body)
+		res.Body.Close()
 		if err := xml.Unmarshal(body, response); err != nil {
 			return "", err
 		}
@@ -154,27 +143,22 @@ func (request *Request) Execute(http_method string, secret string) (res string, 
 }
 
 func checkError(err error, response *Response) error {
-	if response.Error != nil {
+	if response != nil && response.Error != nil {
 		return errors.New(response.Error.Code + ": " + response.Error.Message)
 	}
 	return err
 }
 
 func encodeQuery(args map[string]string) string {
-	i := 0
-	s := bytes.NewBuffer(nil)
+	var b strings.Builder
 	for k, v := range args {
-		if i != 0 {
-			s.WriteString("&")
-		}
-		i++
-		s.WriteString(k + "=" + url.QueryEscape(v))
+		b.WriteString(k + "=" + url.QueryEscape(v) + "&")
 	}
-	return s.String()
+	return strings.TrimSuffix(b.String(), "&")
 }
 
 func (request *Request) buildPost(url_ string, photopath string, filetype string) (*http.Request, error) {
-	real_url, _ := url.Parse(url_)
+	realUrl, _ := url.Parse(url_)
 
 	f, err := os.Open(photopath)
 	if err != nil {
@@ -186,8 +170,6 @@ func (request *Request) buildPost(url_ string, photopath string, filetype string
 		return nil, err
 	}
 	f_size := stat.Size()
-
-	request.Args["oauth_consumer_key"] = request.ApiKey
 
 	boundary, end := "----###---###--flickr-go-rules", "\r\n"
 
@@ -204,7 +186,7 @@ func (request *Request) buildPost(url_ string, photopath string, filetype string
 
 	footer := bytes.NewBufferString(end + "--" + boundary + "--" + end)
 
-	body_len := int64(header.Len()) + int64(footer.Len()) + f_size
+	bodyLen := int64(header.Len()) + int64(footer.Len()) + f_size
 
 	r, w := io.Pipe()
 	go func() {
@@ -221,25 +203,25 @@ func (request *Request) buildPost(url_ string, photopath string, filetype string
 		w.Close()
 	}()
 
-	http_header := make(http.Header)
-	http_header.Add("Content-Type", "multipart/form-data; boundary="+boundary)
+	httpHeader := make(http.Header)
+	httpHeader.Add("Content-Type", "multipart/form-data; boundary="+boundary)
 
 	postRequest := &http.Request{
 		Method:        http.MethodPost,
-		URL:           real_url,
-		Header:        http_header,
+		URL:           realUrl,
+		Header:        httpHeader,
 		Body:          r,
-		ContentLength: body_len,
+		ContentLength: bodyLen,
 	}
 	return postRequest, nil
 }
 
-func (request *Request) UploadJpeg(secret string, photopath string) (photoid string, err error) {
-	return request.Upload(secret, photopath, image_jpeg)
+func (request *Request) UploadJpeg(photopath string, secret string) (photoId string, err error) {
+	return request.Upload(secret, photopath, imageJpeg)
 }
 
-func (request *Request) Upload(secret string, photopath string, filetype string) (result string, err error) {
-	request.sign(http.MethodPost, uploadEndpoint, secret)
+func (request *Request) Upload(photopath string, filetype string, secret string) (result string, err error) {
+	request.sign(uploadEndpoint, secret)
 	postRequest, err := request.buildPost(uploadEndpoint, photopath, filetype)
 	if err != nil {
 		return "", err
@@ -248,12 +230,13 @@ func (request *Request) Upload(secret string, photopath string, filetype string)
 	if err := checkError(err, response); err != nil {
 		return "", err
 	}
-	var photoid string
-	xml.Unmarshal([]byte(response.Payload), &photoid)
-	return photoid, nil
+	var photoId string
+	err = xml.Unmarshal([]byte(response.Payload), &photoId)
+	return photoId, err
 }
 
-func (request *Request) Replace(filename string, filetype string) (response *Response, err error) {
+//TODO Not completed yet
+func (request *Request) replace(filename string, filetype string) (response *Response, err error) {
 	postRequest, err := request.buildPost(replaceEndpoint, filename, filetype)
 	if err != nil {
 		return nil, err
