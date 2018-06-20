@@ -28,8 +28,9 @@ const (
 )
 
 type Request struct {
-	HttpMethod string
-	Args       map[string]string
+	httpMethod string
+	args       map[string]string
+	secret     string
 }
 
 type Response struct {
@@ -55,23 +56,26 @@ func (e Error) Error() string {
 	return string(e)
 }
 
-func NewRequest(a map[string]string) *Request {
+func NewRequest(httpMethod string, auth map[string]string, additionalArgs map[string]string, secret string) *Request {
 	args := make(map[string]string)
 	epoch := strconv.FormatInt(time.Now().Unix(), 10)
 	args["oauth_nonce"] = epoch
 	args["oauth_timestamp"] = epoch
 	args["oauth_signature_method"] = "HMAC-SHA1"
-	if a != nil {
-		for k, v := range a {
+	for k, v := range auth {
+		args[k] = v
+	}
+	if additionalArgs != nil {
+		for k, v := range additionalArgs {
 			args[k] = v
 		}
 	}
-	request := Request{http.MethodGet, args}
+	request := Request{httpMethod, args, secret}
 	return &request
 }
 
-func (request *Request) sign(requestUrl string, secret string) {
-	args := request.Args
+func (request *Request) sign(requestUrl string) {
+	args := request.args
 	delete(args, "oauth_signature")
 
 	sorted_keys := make([]string, len(args))
@@ -85,16 +89,16 @@ func (request *Request) sign(requestUrl string, secret string) {
 	sort.Strings(sorted_keys)
 
 	// Build out ordered key-value string prefixed by secret
-	base := request.HttpMethod + "&" + url.QueryEscape(requestUrl) + "&"
+	base := request.httpMethod + "&" + url.QueryEscape(requestUrl) + "&"
 	var params string
 	for _, key := range sorted_keys {
-		params += fmt.Sprintf("%s=%s&", key, args[key])
+		params += fmt.Sprintf("%s=%s&", key, url.QueryEscape(args[key]))
 	}
 	params = params[:len(params)-1]
 	base += url.QueryEscape(params)
 
 	// Have the full string, now hash
-	hash := hmac.New(sha1.New, []byte(secret))
+	hash := hmac.New(sha1.New, []byte(request.secret))
 	hash.Write([]byte(base))
 	sha := base64.StdEncoding.EncodeToString(hash.Sum(nil))
 
@@ -103,18 +107,18 @@ func (request *Request) sign(requestUrl string, secret string) {
 }
 
 func (request *Request) composeGetUrl() string {
-	s := apiEndpoint + "?" + encodeQuery(request.Args)
+	s := apiEndpoint + "?" + encodeQuery(request.args)
 	return s
 }
 
-func (request *Request) Execute(secret string) (res string, ret error) {
+func (request *Request) Execute() (res string, ret error) {
 	var call_err error
 	var response *Response
 
-	switch request.HttpMethod {
+	switch request.httpMethod {
 	case http.MethodPost:
-		request.sign(apiEndpoint, secret)
-		s := encodeQuery(request.Args)
+		request.sign(apiEndpoint)
+		s := encodeQuery(request.args)
 		postRequest, err := http.NewRequest(http.MethodPost, apiEndpoint, strings.NewReader(s))
 		if err != nil {
 			return "", err
@@ -122,7 +126,7 @@ func (request *Request) Execute(secret string) (res string, ret error) {
 		postRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
 		response, call_err = sendPost(postRequest)
 	case http.MethodGet:
-		request.sign(apiEndpoint, secret)
+		request.sign(apiEndpoint)
 		s := request.composeGetUrl()
 
 		var res *http.Response
@@ -175,7 +179,7 @@ func (request *Request) buildPost(url_ string, photopath string, filetype string
 
 	// Build out all of POST body sans file
 	header := bytes.NewBuffer(nil)
-	for k, v := range request.Args {
+	for k, v := range request.args {
 		header.WriteString("--" + boundary + end)
 		header.WriteString("Content-Disposition: form-data; name=\"" + k + "\"" + end + end)
 		header.WriteString(v + end)
@@ -216,12 +220,13 @@ func (request *Request) buildPost(url_ string, photopath string, filetype string
 	return postRequest, nil
 }
 
-func (request *Request) UploadJpeg(photopath string, secret string) (photoId string, err error) {
-	return request.Upload(secret, photopath, imageJpeg)
+func (request *Request) UploadJpeg(photopath string) (photoId string, err error) {
+	return request.Upload(photopath, imageJpeg)
 }
 
-func (request *Request) Upload(photopath string, filetype string, secret string) (result string, err error) {
-	request.sign(uploadEndpoint, secret)
+func (request *Request) Upload(photopath string, filetype string) (result string, err error) {
+	request.httpMethod = http.MethodPost
+	request.sign(uploadEndpoint)
 	postRequest, err := request.buildPost(uploadEndpoint, photopath, filetype)
 	if err != nil {
 		return "", err
