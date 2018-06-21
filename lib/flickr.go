@@ -134,7 +134,7 @@ func (request *Request) Execute() (res string, ret error) {
 
 		body, _ := ioutil.ReadAll(res.Body)
 		res.Body.Close()
-		if err := xml.Unmarshal(body, response); err != nil {
+		if err := xml.Unmarshal(body, &response); err != nil {
 			return "", err
 		}
 	default:
