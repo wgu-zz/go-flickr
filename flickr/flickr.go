@@ -92,7 +92,8 @@ func (request *Request) sign(requestUrl string) {
 	base := request.httpMethod + "&" + url.QueryEscape(requestUrl) + "&"
 	var params string
 	for _, key := range sorted_keys {
-		params += fmt.Sprintf("%s=%s&", key, url.QueryEscape(args[key]))
+		value := url.QueryEscape(args[key])
+		params += fmt.Sprintf("%s=%s&", key, strings.Replace(value, "+", `%20`, -1))
 	}
 	params = params[:len(params)-1]
 	base += url.QueryEscape(params)
@@ -258,6 +259,7 @@ func sendPost(postRequest *http.Request) (response *Response, err error) {
 		return nil, err
 	}
 	rawBody, _ := ioutil.ReadAll(resp.Body)
+	// fmt.Println(string(rawBody))
 	resp.Body.Close()
 
 	var r Response
