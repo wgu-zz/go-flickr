@@ -259,11 +259,14 @@ func sendPost(postRequest *http.Request) (response *Response, err error) {
 		return nil, err
 	}
 	rawBody, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println(string(rawBody))
 	resp.Body.Close()
 
 	var r Response
 	err = xml.Unmarshal(rawBody, &r)
+	//TODO Temp hack for debug
+	if err != nil {
+		fmt.Println(string(rawBody))
+	}
 
 	return &r, err
 }

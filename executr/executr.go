@@ -12,8 +12,8 @@ func main() {
 	if requestTemplate.Dir == "" {
 		request := flickr.NewRequest(requestTemplate.HttpMethod, requestTemplate.Auth, requestTemplate.AdditionalArgs, requestTemplate.Secret)
 		response, err := request.Execute()
-		checkErr(err)
 		fmt.Println(response)
+		checkErr(err)
 	} else {
 		fmt.Println("Use uploadr instead.")
 	}
