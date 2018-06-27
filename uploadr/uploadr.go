@@ -127,7 +127,8 @@ func main() {
 			checkErr(err, response)
 		}
 	}
-	if requestTemplate.CollectionId != "" {
+
+	if photosetid != "" && requestTemplate.CollectionId != "" {
 		fmt.Println("Adding album " + photosetid + " to collection")
 		additionalArgs := map[string]string{
 			"method":        "flickr.collections.addSet",
