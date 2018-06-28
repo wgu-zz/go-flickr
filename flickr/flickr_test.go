@@ -29,7 +29,7 @@ func TestSign(t *testing.T) {
 func TestUpload(t *testing.T) {
 	t.SkipNow()
 	request := NewRequest(http.MethodPost, auth, nil, secret)
-	photoid, err := request.Upload("photo.jpg", "image/jpeg")
+	photoid, err := request.Upload("photo.jpg")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

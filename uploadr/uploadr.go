@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
-	"mime"
 	"net/http"
 	"path/filepath"
 
@@ -65,14 +64,8 @@ func main() {
 	for _, fileinfo := range files {
 		filename := fileinfo.Name()
 		filenameExt := filepath.Ext(filename)
-
-		// Skip non JPEG files
-		if mime.TypeByExtension(filenameExt) != "image/jpeg" {
-			fmt.Println("Skipping non-jpeg file: " + filename)
-			continue
-		}
-
 		filenameBase := filename[:len(filename)-len(filenameExt)]
+
 		// Album already exists
 		if photosetid != "" {
 			var uploaded bool
@@ -90,7 +83,11 @@ func main() {
 		fmt.Println("Uploading " + filename)
 		photopath := filepath.Join(requestTemplate.Dir, filename)
 		request := flickr.NewRequest(http.MethodPost, requestTemplate.Auth, nil, requestTemplate.Secret)
-		photoid, err := request.UploadJpeg(photopath)
+		photoid, err := request.Upload(photopath)
+		if err != nil && err.Error() == photopath+" is not an image." {
+			fmt.Println(err.Error() + " Skipped...")
+			continue
+		}
 		checkErr(err)
 
 		// No album yet
