@@ -18,13 +18,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	filetype "gopkg.in/h2non/filetype.v1"
 )
 
 const (
 	apiEndpoint     = "https://api.flickr.com/services/rest"
 	uploadEndpoint  = "https://up.flickr.com/services/upload"
 	replaceEndpoint = "https://up.flickr.com/services/replace"
-	imageJpeg       = "image/jpeg"
 )
 
 type Request struct {
@@ -221,14 +222,16 @@ func (request *Request) buildPost(url_ string, photopath string, filetype string
 	return postRequest, nil
 }
 
-func (request *Request) UploadJpeg(photopath string) (photoId string, err error) {
-	return request.Upload(photopath, imageJpeg)
-}
+func (request *Request) Upload(photopath string) (photoId string, err error) {
+	fileType, err := filetype.MatchFile(photopath)
+	checkError(err, nil)
+	if !IsImage(fileType) {
+		return "", errors.New(photopath + " is not an image.")
+	}
 
-func (request *Request) Upload(photopath string, filetype string) (result string, err error) {
 	request.httpMethod = http.MethodPost
 	request.sign(uploadEndpoint)
-	postRequest, err := request.buildPost(uploadEndpoint, photopath, filetype)
+	postRequest, err := request.buildPost(uploadEndpoint, photopath, fileType.MIME.Value)
 	if err != nil {
 		return "", err
 	}
@@ -236,7 +239,6 @@ func (request *Request) Upload(photopath string, filetype string) (result string
 	if err := checkError(err, response); err != nil {
 		return "", err
 	}
-	var photoId string
 	err = xml.Unmarshal([]byte(response.Payload), &photoId)
 	return photoId, err
 }
