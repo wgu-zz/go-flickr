@@ -3,8 +3,10 @@ package flickr
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type RequestTemplate struct {
@@ -57,4 +59,36 @@ func NewRequestFromCmd() (*RequestTemplate, error) {
 	return &RequestTemplate{
 		httpMethod, auth, additionalArgs, secret, dir, collectionId, album,
 	}, nil
+}
+
+func retry(attempts int, sleep time.Duration, fn func() error) error {
+	if err := fn(); err != nil {
+		if attempts--; attempts > 0 {
+			fmt.Printf("Retrying after %s...\n", sleep)
+			time.Sleep(sleep)
+			return retry(attempts, 2*sleep, fn)
+		}
+		return err
+	}
+	return nil
+}
+
+func (request *Request) ExecuteWithRetry(attempts int, sleep time.Duration) (string, error) {
+	var response string
+	retryErr := retry(attempts, sleep, func() error {
+		var err error
+		response, err = request.Execute()
+		return err
+	})
+	return response, retryErr
+}
+
+func (request *Request) UploadWithRetry(photoPath string, attempts int, sleep time.Duration) (string, error) {
+	var photoId string
+	retryErr := retry(attempts, sleep, func() error {
+		var err error
+		photoId, err = request.Upload(photoPath)
+		return err
+	})
+	return photoId, retryErr
 }
