@@ -26,6 +26,15 @@ type photosets struct {
 	Photoset []photoset `xml:"photoset"`
 }
 
+type collections struct {
+	Collection []collection `xml:"collection"`
+}
+
+type collection struct {
+	Id    string `xml:"id,attr"`
+	Title string `xml:"title,attr"`
+}
+
 func main() {
 	requestTemplate, err := flickr.NewRequestFromCmd()
 	checkErr(err)
@@ -124,15 +133,43 @@ func main() {
 		}
 	}
 
-	if photosetid != "" && requestTemplate.CollectionId != "" {
-		fmt.Println("Adding album " + photosetid + " to collection")
+	if photosetid != "" && requestTemplate.Collection != "" {
 		additionalArgs := map[string]string{
+			"method": "flickr.collections.getTree",
+		}
+		request := flickr.NewRequest(http.MethodGet, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
+		response, err := request.ExecuteWithRetry(2, time.Second)
+		checkErr(err, response)
+		var cs collections
+		checkErr(xml.Unmarshal([]byte(response), &cs), response)
+		var collectionId string
+		for _, c := range cs.Collection {
+			if c.Title == requestTemplate.Collection {
+				collectionId = c.Id
+				break
+			}
+		}
+		if collectionId == "" {
+			fmt.Println("Creating collection " + requestTemplate.Collection)
+			additionalArgs := map[string]string{
+				"method": "flickr.collections.create",
+				"title":  requestTemplate.Collection,
+			}
+			request := flickr.NewRequest(http.MethodPost, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
+			response, err := request.ExecuteWithRetry(2, time.Second)
+			checkErr(err, response)
+			var c collection
+			checkErr(xml.Unmarshal([]byte(response), &c))
+			collectionId = c.Id
+		}
+		fmt.Println("Adding album " + photosetid + " to collection")
+		additionalArgs = map[string]string{
 			"method":        "flickr.collections.addSet",
-			"collection_id": requestTemplate.CollectionId,
+			"collection_id": collectionId,
 			"photoset_id":   photosetid,
 		}
-		request := flickr.NewRequest(http.MethodPost, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
-		response, err := request.ExecuteWithRetry(2, time.Second)
+		request = flickr.NewRequest(http.MethodPost, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
+		response, err = request.ExecuteWithRetry(2, time.Second)
 		if err != nil && err.Error() == "4: Set already in collection" {
 			fmt.Println("Album already in collection")
 		} else {

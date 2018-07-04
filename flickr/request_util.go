@@ -15,19 +15,19 @@ type RequestTemplate struct {
 	AdditionalArgs map[string]string
 	Secret         string
 	Dir            string
-	CollectionId   string
+	Collection     string
 	Album          string
 }
 
 func NewRequestFromCmd() (*RequestTemplate, error) {
-	var httpMethod, oauth_consumer_key, oauth_token, args, secret, dir, collectionId, album string
+	var httpMethod, oauth_consumer_key, oauth_token, args, secret, dir, collection, album string
 	flag.StringVar(&httpMethod, "http_method", http.MethodGet, "The HTTP verb this request should use.")
 	flag.StringVar(&oauth_consumer_key, "oauth_consumer_key", "", "The API Key flickr gives.")
 	flag.StringVar(&oauth_token, "oauth_token", "", "The oauth token.")
 	flag.StringVar(&args, "args", "", "Only for non-upload or non-replace. Arguments like flickr method, photo_id, etc. Format: \"key1=value1&key2=value2...\".")
 	flag.StringVar(&secret, "secret", "", "The secret used to sign the request composed by \"api_secret&token_secret\".")
 	flag.StringVar(&dir, "dir", "", "Only for upload request. Cannot be used together with `args`. The directory of photos to be uploaded.")
-	flag.StringVar(&collectionId, "collection_id", "", "Optional. Only for upload request. The collection the album should be put in.")
+	flag.StringVar(&collection, "collection", "", "Optional. Only for upload request. The collection the album should be put in.")
 	flag.StringVar(&album, "album", "", "Optional. Only for upload request. The album name to upload into. If not exsiting a new album will be created. Note: files with duplicate name in the album will be skipped.")
 	flag.Parse()
 	if oauth_consumer_key == "" {
@@ -39,8 +39,8 @@ func NewRequestFromCmd() (*RequestTemplate, error) {
 	if secret == "" {
 		return nil, errors.New("Missing secret")
 	}
-	if args != "" && (dir != "" || collectionId != "" || album != "") {
-		return nil, errors.New("Either args or dir [+ collection_id] [+ album] can be taken")
+	if args != "" && (dir != "" || collection != "" || album != "") {
+		return nil, errors.New("Either args or dir [+ collection] [+ album] can be taken")
 	}
 	auth := map[string]string{
 		"oauth_consumer_key": oauth_consumer_key,
@@ -57,7 +57,7 @@ func NewRequestFromCmd() (*RequestTemplate, error) {
 		}
 	}
 	return &RequestTemplate{
-		httpMethod, auth, additionalArgs, secret, dir, collectionId, album,
+		httpMethod, auth, additionalArgs, secret, dir, collection, album,
 	}, nil
 }
 
