@@ -28,6 +28,30 @@ const (
 	replaceEndpoint = "https://up.flickr.com/services/replace"
 )
 
+type Photo struct {
+	Id    string `xml:"id,attr"`
+	Title string `xml:"title,attr"`
+}
+
+type Photoset struct {
+	Id    string  `xml:"id,attr"`
+	Title string  `xml:"title"`
+	Photo []Photo `xml:"photo"`
+}
+
+type Photosets struct {
+	Photoset []Photoset `xml:"photoset"`
+}
+
+type Collections struct {
+	Collection []Collection `xml:"collection"`
+}
+
+type Collection struct {
+	Id    string `xml:"id,attr"`
+	Title string `xml:"title,attr"`
+}
+
 type Request struct {
 	httpMethod string
 	args       map[string]string

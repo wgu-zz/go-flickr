@@ -11,36 +11,12 @@ import (
 	"github.com/wgu/go-flickr/flickr"
 )
 
-type photo struct {
-	Id    string `xml:"id,attr"`
-	Title string `xml:"title,attr"`
-}
-
-type photoset struct {
-	Id    string  `xml:"id,attr"`
-	Title string  `xml:"title"`
-	Photo []photo `xml:"photo"`
-}
-
-type photosets struct {
-	Photoset []photoset `xml:"photoset"`
-}
-
-type collections struct {
-	Collection []collection `xml:"collection"`
-}
-
-type collection struct {
-	Id    string `xml:"id,attr"`
-	Title string `xml:"title,attr"`
-}
-
 func main() {
 	requestTemplate, err := flickr.NewRequestFromCmd()
-	checkErr(err)
+	flickr.CheckErr(err)
 
 	var photosetid string
-	uploadedPhotoSet := photoset{}
+	uploadedPhotoSet := flickr.Photoset{}
 
 	// Specified album name to upload photos to or be created
 	if requestTemplate.Album != "" {
@@ -49,9 +25,9 @@ func main() {
 		}
 		request := flickr.NewRequest(http.MethodGet, requestTemplate.Auth, args, requestTemplate.Secret)
 		response, err := request.ExecuteWithRetry(2, time.Second)
-		checkErr(err, response)
-		var photoSets photosets
-		checkErr(xml.Unmarshal([]byte(response), &photoSets), response)
+		flickr.CheckErr(err, response)
+		var photoSets flickr.Photosets
+		flickr.CheckErr(xml.Unmarshal([]byte(response), &photoSets), response)
 		for _, photoSet := range photoSets.Photoset {
 			if photoSet.Title != requestTemplate.Album {
 				continue
@@ -63,14 +39,14 @@ func main() {
 			}
 			request = flickr.NewRequest(http.MethodGet, requestTemplate.Auth, args, requestTemplate.Secret)
 			response, err = request.ExecuteWithRetry(2, time.Second)
-			checkErr(err, response)
-			checkErr(xml.Unmarshal([]byte(response), &uploadedPhotoSet), response)
+			flickr.CheckErr(err, response)
+			flickr.CheckErr(xml.Unmarshal([]byte(response), &uploadedPhotoSet), response)
 			break
 		}
 	}
 
 	files, err := ioutil.ReadDir(requestTemplate.Dir)
-	checkErr(err)
+	flickr.CheckErr(err)
 	for _, fileinfo := range files {
 		filename := fileinfo.Name()
 		filenameExt := filepath.Ext(filename)
@@ -98,7 +74,7 @@ func main() {
 			fmt.Println(err.Error() + " Skipped...")
 			continue
 		}
-		checkErr(err)
+		flickr.CheckErr(err)
 
 		// No album yet
 		if photosetid == "" {
@@ -114,10 +90,10 @@ func main() {
 			}
 			request = flickr.NewRequest(http.MethodPost, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
 			response, err := request.ExecuteWithRetry(2, time.Second)
-			checkErr(err, response)
+			flickr.CheckErr(err, response)
 			// fmt.Println(response)
-			var pset photoset
-			checkErr(xml.Unmarshal([]byte(response), &pset), response)
+			var pset flickr.Photoset
+			flickr.CheckErr(xml.Unmarshal([]byte(response), &pset), response)
 			photosetid = pset.Id
 			fmt.Println("Photaset id: " + photosetid)
 		} else {
@@ -129,7 +105,7 @@ func main() {
 			}
 			request = flickr.NewRequest(http.MethodPost, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
 			response, err := request.ExecuteWithRetry(2, time.Second)
-			checkErr(err, response)
+			flickr.CheckErr(err, response)
 		}
 	}
 
@@ -139,9 +115,9 @@ func main() {
 		}
 		request := flickr.NewRequest(http.MethodGet, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
 		response, err := request.ExecuteWithRetry(2, time.Second)
-		checkErr(err, response)
-		var cs collections
-		checkErr(xml.Unmarshal([]byte(response), &cs), response)
+		flickr.CheckErr(err, response)
+		var cs flickr.Collections
+		flickr.CheckErr(xml.Unmarshal([]byte(response), &cs), response)
 		var collectionId string
 		for _, c := range cs.Collection {
 			if c.Title == requestTemplate.Collection {
@@ -157,9 +133,9 @@ func main() {
 			}
 			request := flickr.NewRequest(http.MethodPost, requestTemplate.Auth, additionalArgs, requestTemplate.Secret)
 			response, err := request.ExecuteWithRetry(2, time.Second)
-			checkErr(err, response)
-			var c collection
-			checkErr(xml.Unmarshal([]byte(response), &c))
+			flickr.CheckErr(err, response)
+			var c flickr.Collection
+			flickr.CheckErr(xml.Unmarshal([]byte(response), &c))
 			collectionId = c.Id
 		}
 		fmt.Println("Adding album " + photosetid + " to collection")
@@ -173,16 +149,7 @@ func main() {
 		if err != nil && err.Error() == "4: Set already in collection" {
 			fmt.Println("Album already in collection")
 		} else {
-			checkErr(err, response)
+			flickr.CheckErr(err, response)
 		}
-	}
-}
-
-func checkErr(e error, msg ...string) {
-	if e != nil {
-		for m := range msg {
-			fmt.Println(m)
-		}
-		panic(e)
 	}
 }
