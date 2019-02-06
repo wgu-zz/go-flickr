@@ -29,14 +29,17 @@ const (
 )
 
 type Photo struct {
-	Id    string `xml:"id,attr"`
-	Title string `xml:"title,attr"`
+	Id             string `xml:"id,attr"`
+	Title          string `xml:"title,attr"`
+	UrlO           string `xml:"url_o,attr"`
+	OriginalFormat string `xml:"originalformat,attr"`
 }
 
 type Photoset struct {
 	Id    string  `xml:"id,attr"`
 	Title string  `xml:"title"`
 	Photo []Photo `xml:"photo"`
+	Pages int     `xml:"pages,attr"`
 }
 
 type Photosets struct {
